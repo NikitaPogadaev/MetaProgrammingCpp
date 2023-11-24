@@ -85,10 +85,11 @@ struct WrapperCopyable: BaseWrapperCopyable {
 
 // Allocator is only used in bonus SBO tests,
 // ignore if you don't need bonus points.
-template <class T>
+template <class T> 
 class Spy {
 public:
-  explicit Spy(T&& value) : value_(std::forward<decltype(value)>(value)) {}
+  explicit Spy(T&& value) requires (std::move_constructible<T>)
+  : value_(std::forward<decltype(value)>(value)) {}
 
   T& operator *(){
     return value_;
@@ -124,7 +125,7 @@ public:
   }
 
   Spy()
-  requires (std::is_default_constructible_v<T>)
+  requires (std::is_default_constructible_v<T> && (std::move_constructible<T>))
   : value_(), logger_(nullptr) {};
 
   /*
@@ -135,15 +136,15 @@ public:
    *   equality operators
    *   destructor
   */
-
-  Spy (Spy&& spy){
+ 
+  Spy (Spy&& spy) requires (std::move_constructible<T> && std::swappable<T> && std::assignable_from<T&, T>){
     value_ = std::move(spy.value_);
     logger_ = std::move(spy.logger_);
     counter_ = spy.counter_;
     spy.counter_ = 0;
   }
 
-  Spy& operator = (Spy&& spy){
+  Spy& operator = (Spy&& spy) requires (std::move_constructible<T> && std::assignable_from<T&, T> && std::assignable_from<T&, T>){
     ////////
     if(&spy == this) return *this;
     ////////
@@ -155,11 +156,18 @@ public:
     return *this;
   }
 
-  Spy (const Spy& spy) requires (std::copy_constructible<T>) : value_(spy.value_) {
+  Spy (const Spy& spy) requires (std::copy_constructible<T> && std::move_constructible<T> && std::assignable_from<T&, T>) : value_(spy.value_) {
     if(spy.logger_.get() != nullptr){
       logger_.reset(spy.logger_->Clone());
     }
     counter_ = 0;
+  }
+
+  void swap (Spy& a, Spy& b) requires (std::move_constructible<T> && std::assignable_from<T&, T> && std::swappable<T>){
+    a.value_.swap(b.value_);
+    a.logger_.swap(b.logger_);
+    a.counter_ = 0;
+    b.counter_ = 0;
   }
 
   Spy& operator = (const Spy& spy) requires (std::copy_constructible<T>){
